@@ -720,6 +720,7 @@ let activeQuestions = [];    // subset según filtro
 let currentIndex = 0;
 let selectedLetter = null;
 let sessionAnswers = {};     // { idx: { correct: bool, letter: 'A' } }
+let shuffledOptionsMap = {}; // { idx: { A: 'B', B: 'C', C: 'A' } } mapeo posición→letra original
 
 // ═══════════════════════════════════════════════════════════════════
 //  INIT
@@ -770,6 +771,7 @@ function startQuiz() {
   currentIndex = 0;
   selectedLetter = null;
   sessionAnswers = {};
+  shuffledOptionsMap = {};
 
   document.getElementById('home').style.display = 'none';
   document.getElementById('quiz').style.display = 'block';
@@ -836,20 +838,38 @@ function loadQuestion() {
   // Question text
   document.getElementById('question-text').textContent = q.question;
 
-  // Options
+  // Options — con shuffle aleatorio de posiciones
   const ol = document.getElementById('options-list');
   ol.innerHTML = '';
-  ['A','B','C'].forEach(letter => {
-    if (!q.options[letter]) return;
+
+  // Construir o recuperar el mapeo shuffled para esta pregunta
+  // shuffledOptionsMap[idx] = [ { displayLetter: 'A', originalLetter: 'C' }, ... ]
+  if (!shuffledOptionsMap[currentIndex]) {
+    const originalLetters = ['A','B','C'].filter(l => q.options[l]);
+    // Fisher-Yates shuffle
+    for (let i = originalLetters.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [originalLetters[i], originalLetters[j]] = [originalLetters[j], originalLetters[i]];
+    }
+    const displayLetters = ['A','B','C'].slice(0, originalLetters.length);
+    shuffledOptionsMap[currentIndex] = displayLetters.map((dl, i) => ({
+      displayLetter: dl,
+      originalLetter: originalLetters[i]
+    }));
+  }
+
+  const mapping = shuffledOptionsMap[currentIndex];
+  mapping.forEach(({ displayLetter, originalLetter }) => {
     const li = document.createElement('li');
     li.className = 'option-item';
-    li.dataset.letter = letter;
+    li.dataset.letter = displayLetter;        // letra que ve el usuario
+    li.dataset.original = originalLetter;     // letra real del JSON
     li.innerHTML = `
       <div class="option-radio"></div>
-      <div class="option-label"><strong>${letter}.</strong> ${q.options[letter]}</div>
+      <div class="option-label"><strong>${displayLetter}.</strong> ${q.options[originalLetter]}</div>
     `;
     if (!answered && mode === 'exam') {
-      li.onclick = () => selectOption(letter);
+      li.onclick = () => selectOption(displayLetter);
     }
     ol.appendChild(li);
   });
@@ -895,7 +915,13 @@ function selectOption(letter) {
 function submitAnswer() {
   if (!selectedLetter) return;
   const q = activeQuestions[currentIndex];
-  const correct = selectedLetter.toUpperCase() === q.correct_answer.toUpperCase();
+
+  // Obtener la letra ORIGINAL que corresponde a la letra mostrada al usuario
+  const mapping = shuffledOptionsMap[currentIndex];
+  const selectedEntry = mapping.find(m => m.displayLetter === selectedLetter);
+  const selectedOriginal = selectedEntry ? selectedEntry.originalLetter : selectedLetter;
+
+  const correct = selectedOriginal.toUpperCase() === q.correct_answer.toUpperCase();
 
   // Save to session & state
   sessionAnswers[currentIndex] = { letter: selectedLetter, correct };
@@ -907,14 +933,17 @@ function submitAnswer() {
   updateNavDots();
 }
 
-function applyAnswerVisuals(q, letter, correct) {
-  const correctLetter = q.correct_answer.toUpperCase();
+function applyAnswerVisuals(q, selectedDisplayLetter, correct) {
+  // Encontrar qué letra de display corresponde a la respuesta correcta original
+  const mapping = shuffledOptionsMap[currentIndex] || [];
+  const correctEntry = mapping.find(m => m.originalLetter === q.correct_answer.toUpperCase());
+  const correctDisplayLetter = correctEntry ? correctEntry.displayLetter : q.correct_answer.toUpperCase();
 
   document.querySelectorAll('.option-item').forEach(el => {
     el.classList.add('disabled');
     el.onclick = null;
-    if (el.dataset.letter === correctLetter) el.classList.add('correct');
-    if (el.dataset.letter === letter && !correct) el.classList.add('wrong');
+    if (el.dataset.letter === correctDisplayLetter) el.classList.add('correct');
+    if (el.dataset.letter === selectedDisplayLetter && !correct) el.classList.add('wrong');
   });
 
   // Feedback
@@ -927,7 +956,7 @@ function applyAnswerVisuals(q, letter, correct) {
     ft.innerHTML = '<span class="ok">✅ ¡Correcto!</span>';
   } else {
     fb.className = 'feedback-box incorrect';
-    ft.innerHTML = `<span class="bad">❌ Incorrecto — La respuesta era <strong>${correctLetter}</strong>: ${q.options[q.correct_answer]}</span>`;
+    ft.innerHTML = `<span class="bad">❌ Incorrecto — La respuesta era <strong>${correctDisplayLetter}</strong>: ${q.options[q.correct_answer]}</span>`;
   }
   fe.textContent = q.explanation || '';
   fb.style.display = 'block';
@@ -936,12 +965,15 @@ function applyAnswerVisuals(q, letter, correct) {
 }
 
 function showStudyAnswer(q) {
-  const correctLetter = q.correct_answer.toUpperCase();
+  // Encontrar qué letra de display corresponde a la correcta
+  const mapping = shuffledOptionsMap[currentIndex] || [];
+  const correctEntry = mapping.find(m => m.originalLetter === q.correct_answer.toUpperCase());
+  const correctDisplayLetter = correctEntry ? correctEntry.displayLetter : q.correct_answer.toUpperCase();
 
   document.querySelectorAll('.option-item').forEach(el => {
     el.classList.add('disabled');
     el.onclick = null;
-    if (el.dataset.letter === correctLetter) el.classList.add('correct');
+    if (el.dataset.letter === correctDisplayLetter) el.classList.add('correct');
   });
 
   const fb = document.getElementById('feedback-box');
@@ -949,7 +981,7 @@ function showStudyAnswer(q) {
   const fe = document.getElementById('feedback-explanation');
 
   fb.className = 'feedback-box study-show';
-  ft.innerHTML = `<span class="info">📖 Respuesta correcta: <strong>${correctLetter}</strong> — ${q.options[q.correct_answer]}</span>`;
+  ft.innerHTML = `<span class="info">📖 Respuesta correcta: <strong>${correctDisplayLetter}</strong> — ${q.options[q.correct_answer]}</span>`;
   fe.textContent = q.explanation || '';
   fb.style.display = 'block';
 }
@@ -1917,7 +1949,7 @@ const quizData = [
     "options": {
       "A": "type House ( relation rooms: Room[4,5]; require(rooms.size > 3, rooms [MediaRoom] color=\"Blue\"))",
       "B": "type House ( J; relation rooms: Room(0..5); require(rooms.size > 3, rooms MediaRoom] (color=\"Blue\"))",
-      "C": "type House {relation rooms : Room[0..5];require(rooms.size > 3, House[MediaRoom=true, color = "Blue"})};"
+      "C": "type House {relation rooms : Room[0..5];require(rooms.size > 3, House[MediaRoom=true, color = \"Blue\"})};"
     },
     "correct_answer": "B",
     "explanation": "up to five rooms = puede tener 0, 1, 2, 3, 4 o 5 habitaciones"
