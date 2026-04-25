@@ -1916,11 +1916,11 @@ const quizData = [
     "question": "A product administrator needs to use the Constraint Modeling Language (CML) construct available in Advanced Configurator to define a relationship for a House with up to five rooms. The relationship also requires that a MediaRoom in the color blue must be included when the house has more than three rooms. Which option should the administrator use to accomplish this? [cite: 141-143]",
     "options": {
       "A": "type House ( relation rooms: Room[4,5]; require(rooms.size > 3, rooms [MediaRoom] color=\"Blue\"))",
-      "B": "type House ( J; relation rooms: Room(0.5); require(rooms.size > 3, rooms MediaRoom] (color=\"Blue\"))",
-      "C": "type House { relation rooms: Room (0.5); require(rooms.size > 3, House(MediaRoom true, $color=^{*}B(\\omega e^{-}))$"
+      "B": "type House ( J; relation rooms: Room(0..5); require(rooms.size > 3, rooms MediaRoom] (color=\"Blue\"))",
+      "C": "type House {relation rooms : Room[0..5];require(rooms.size > 3, House[MediaRoom=true, color = "Blue"})};"
     },
-    "correct_answer": "A",
-    "explanation": "La opción A define correctamente una relación de habitaciones donde la cardinalidad sugiere el requisito (aunque 'up to 5' suele ser 0..5, la opción A usa [4,5] quizás implicando el escenario estricto de la pregunta). Sin embargo, sintácticamente es la única coherente con CML para requerir una propiedad (color=Blue) basada en una condición de tamaño."
+    "correct_answer": "B",
+    "explanation": "up to five rooms = puede tener 0, 1, 2, 3, 4 o 5 habitaciones"
   },
   {
     "id": "Q084",
